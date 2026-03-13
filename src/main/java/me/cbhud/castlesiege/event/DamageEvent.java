@@ -10,6 +10,12 @@ import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import me.cbhud.castlesiege.kit.CustomItem;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 import org.bukkit.event.entity.EntityDamageEvent;
 
 public class DamageEvent implements Listener {
@@ -69,6 +75,16 @@ public class DamageEvent implements Listener {
 
         if (damagedTeam != null && damagedTeam == damagerTeam) {
             event.setCancelled(true);
+            return;
+        }
+
+        // Mystic Sword: 1/15 chance to apply poison on hit
+        ItemStack held = damager.getInventory().getItemInMainHand();
+        Optional<CustomItem> customItem = plugin.getItemManager().matchCustomItem(held);
+        if (customItem.isPresent() && customItem.get().getId().equals("sword")) {
+            if (ThreadLocalRandom.current().nextInt(15) == 0) {
+                damagedPlayer.addPotionEffect(new PotionEffect(PotionEffectType.POISON, 60, 0));
+            }
         }
     }
 }

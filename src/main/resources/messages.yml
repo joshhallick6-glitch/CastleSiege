@@ -30,6 +30,7 @@ stats-msg:
   - "&dKills: &b{cs_kills}"
   - "&cDeaths: &b{cs_deaths}"
   - "&5K/D: &b{cs_kdr}"
+  - "&6King Kills: &b{cs_king_kills}"
   - "&eCoins: &6{cs_coins}"
   - "&7&m-------------------"
 
@@ -241,7 +242,7 @@ items:
   sword:
     name: "§dMystic Sword"
     lore:
-      - "§70.06% chance to poison on damage"
+      - "§7~6.67% chance to poison on damage"
 
   attack:
     name: "§cAttack Wand"

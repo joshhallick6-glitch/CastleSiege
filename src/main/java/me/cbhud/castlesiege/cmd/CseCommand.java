@@ -61,6 +61,7 @@ public class CseCommand implements CommandExecutor, TabCompleter {
             case "coins" -> cmdCoins(sender, subArgs);
             case "arena" -> cmdArena(sender, subArgs);
             case "setlobby" -> cmdSetLobby(sender, subArgs);
+            case "kit" -> cmdKit(sender, subArgs);
             default -> {
                 sendHelp(sender);
                 yield true;
@@ -77,7 +78,8 @@ public class CseCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/cse leave");
         sender.sendMessage(ChatColor.YELLOW + "/cse stats [player]");
         sender.sendMessage(ChatColor.YELLOW + "/cse arena <create|setlobby|setking|setdefenders|setattackers|finish|cancel>");
-        sender.sendMessage(ChatColor.YELLOW + "/cse coins <add|remove> <player> <amount>");
+        sender.sendMessage(ChatColor.YELLOW + "/cse coins <set|add|remove> <player> <amount>");
+        sender.sendMessage(ChatColor.YELLOW + "/cse kit <unlock|lock> <kitName> <player>");
         sender.sendMessage(ChatColor.YELLOW + "/cse setlobby");
     }
 
@@ -237,6 +239,7 @@ public class CseCommand implements CommandExecutor, TabCompleter {
                 int kills = plugin.getDataManager().getPlayerKills(targetUuid);
                 int deaths = plugin.getDataManager().getPlayerDeaths(targetUuid);
                 int coins = plugin.getDataManager().getPlayerCoins(targetUuid);
+                int kingKills = plugin.getDataManager().getPlayerKingKills(targetUuid);
 
                 double kdr = deaths > 0 ? (double) kills / deaths : kills;
 
@@ -250,6 +253,7 @@ public class CseCommand implements CommandExecutor, TabCompleter {
                                 .replace("{cs_deaths}", String.valueOf(deaths))
                                 .replace("{cs_coins}", String.valueOf(coins))
                                 .replace("{cs_kdr}", String.valueOf(kdr))
+                                .replace("{cs_king_kills}", String.valueOf(kingKills))
                         );
                     }
                 });
@@ -273,7 +277,7 @@ public class CseCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length != 3) {
-            sender.sendMessage(ChatColor.RED + "Usage: /cse coins <add|remove> <player> <amount>");
+            sender.sendMessage(ChatColor.RED + "Usage: /cse coins <set|add|remove> <player> <amount>");
             return true;
         }
 
@@ -283,7 +287,7 @@ public class CseCommand implements CommandExecutor, TabCompleter {
         int amount;
         try {
             amount = Integer.parseInt(args[2]);
-            if (amount <= 0) throw new NumberFormatException();
+            if (amount < 0) throw new NumberFormatException();
         } catch (NumberFormatException e) {
             sender.sendMessage(ChatColor.RED + "Amount must be a positive number.");
             return true;
@@ -297,7 +301,10 @@ public class CseCommand implements CommandExecutor, TabCompleter {
 
         UUID uuid = target.getUniqueId();
 
-        if (action.equals("add")) {
+        if (action.equals("set")) {
+            plugin.getDataManager().setPlayerCoins(uuid, amount);
+            sender.sendMessage(ChatColor.GREEN + "Set " + target.getName() + "'s coins to " + amount + ".");
+        } else if (action.equals("add")) {
             plugin.getDataManager().addPlayerCoins(uuid, amount);
             sender.sendMessage(ChatColor.GREEN + "Added " + amount + " coins to " + target.getName() + ".");
         } else if (action.equals("remove")) {
@@ -305,6 +312,44 @@ public class CseCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(ChatColor.GREEN + "Removed " + amount + " coins from " + target.getName() + ".");
         } else {
             sender.sendMessage(ChatColor.RED + "Invalid action. Use add or remove.");
+        }
+
+        return true;
+    }
+
+    // ---------------- KIT ADMIN ----------------
+
+    private boolean cmdKit(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("cs.admin")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission.");
+            return true;
+        }
+
+        if (args.length != 3) {
+            sender.sendMessage(ChatColor.RED + "Usage: /cse kit <unlock|lock> <kitName> <player>");
+            return true;
+        }
+
+        String action = args[0].toLowerCase();
+        String kitName = args[1];
+        String targetName = args[2];
+
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
+        if (!target.hasPlayedBefore() && !target.isOnline()) {
+            sender.sendMessage(ChatColor.RED + "That player has never played before.");
+            return true;
+        }
+
+        UUID uuid = target.getUniqueId();
+
+        if (action.equals("unlock")) {
+            plugin.getDataManager().adminUnlockKit(uuid, kitName);
+            sender.sendMessage(ChatColor.GREEN + "Unlocked kit " + kitName + " for " + target.getName() + ".");
+        } else if (action.equals("lock")) {
+            plugin.getDataManager().adminLockKit(uuid, kitName);
+            sender.sendMessage(ChatColor.GREEN + "Locked kit " + kitName + " for " + target.getName() + ".");
+        } else {
+            sender.sendMessage(ChatColor.RED + "Invalid action. Use unlock or lock.");
         }
 
         return true;
@@ -490,7 +535,7 @@ public class CseCommand implements CommandExecutor, TabCompleter {
 
         // Example: /cse <sub>
         if (tokens.size() == 1) {
-            return partial(tokens.get(0), List.of("join", "randomjoin", "leave", "stats", "arena", "coins", "setlobby"));
+            return partial(tokens.get(0), List.of("join", "randomjoin", "leave", "stats", "arena", "coins", "kit", "setlobby"));
         }
 
         String sub = tokens.get(0).toLowerCase();
@@ -506,9 +551,14 @@ public class CseCommand implements CommandExecutor, TabCompleter {
             return partial(tokens.get(1), List.of("create", "setlobby", "setking", "setdefenders", "setattackers", "finish", "cancel"));
         }
 
-        // /cse coins <add|remove>
+        // /cse coins <set|add|remove>
         if (sub.equals("coins") && tokens.size() == 2) {
-            return partial(tokens.get(1), List.of("add", "remove"));
+            return partial(tokens.get(1), List.of("set", "add", "remove"));
+        }
+
+        // /cse kit <unlock|lock>
+        if (sub.equals("kit") && tokens.size() == 2) {
+            return partial(tokens.get(1), List.of("unlock", "lock"));
         }
 
         return Collections.emptyList();

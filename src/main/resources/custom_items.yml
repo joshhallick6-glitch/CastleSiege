@@ -115,3 +115,10 @@ items:
     name: "&eThrowable Axe"
     lore:
       - "&7Right-click to throw!"
+  sword:
+    material: IRON_SWORD
+    name: "&dMystic Sword"
+    lore:
+      - "&7~6.67% chance to poison on hit"
+    cooldown: 0
+    effects:

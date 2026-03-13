@@ -239,6 +239,10 @@ public class MobManager implements Listener {
 
         Player killer = zombie.getKiller();
         if (killer != null) {
+            plugin.getDataManager().incrementKingKills(killer.getUniqueId());
+        }
+
+        if (killer != null) {
             arena = plugin.getArenaManager().getArenaByPlayer(killer.getUniqueId());
         }
 

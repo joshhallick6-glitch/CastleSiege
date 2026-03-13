@@ -50,7 +50,8 @@ public class DataManager {
                 coins INTEGER NOT NULL DEFAULT 0,
                 kills INTEGER NOT NULL DEFAULT 0,
                 deaths INTEGER NOT NULL DEFAULT 0,
-                wins INTEGER NOT NULL DEFAULT 0
+                wins INTEGER NOT NULL DEFAULT 0,
+                king_kills INTEGER NOT NULL DEFAULT 0
             );""";
             String createKitsSql = """
             CREATE TABLE IF NOT EXISTS kits (
@@ -70,6 +71,8 @@ public class DataManager {
             statement.execute(createPlayerStatsSql);
             statement.execute(createKitsSql);
             statement.execute(createPlayerKitsSql);
+
+            statement.execute("ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS king_kills INTEGER NOT NULL DEFAULT 0;");
         } catch (SQLException e) {
             Bukkit.getScheduler().runTask(plugin, () -> {
                 plugin.getLogger().severe("Error creating tables: " + e.getMessage());
@@ -205,6 +208,23 @@ public class DataManager {
         }.runTaskAsynchronously(plugin);
     }
 
+    public void incrementKingKills(UUID uuid) {
+        String sql = "UPDATE player_stats SET king_kills = king_kills + 1 WHERE uuid = ?";
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement statement = conn.prepareStatement(sql)) {
+                    statement.setString(1, uuid.toString());
+                    statement.executeUpdate();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+        }.runTaskAsynchronously(plugin);
+    }
+
     public int getPlayerKills(UUID uuid) {
         String getKillsSql = "SELECT kills FROM player_stats WHERE uuid = ?";
 
@@ -248,6 +268,23 @@ public class DataManager {
             try (ResultSet rs = statement.executeQuery()) {
                 if (rs.next()) {
                     return rs.getInt("deaths");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public int getPlayerKingKills(UUID uuid) {
+        String sql = "SELECT king_kills FROM player_stats WHERE uuid = ?";
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement statement = conn.prepareStatement(sql)) {
+            statement.setString(1, uuid.toString());
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("king_kills");
                 }
             }
         } catch (SQLException e) {
@@ -316,6 +353,24 @@ public class DataManager {
         }.runTaskAsynchronously(plugin);
     }
 
+    public void setPlayerCoins(UUID uuid, int amount) {
+        String sql = "UPDATE player_stats SET coins = ? WHERE uuid = ?";
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement statement = conn.prepareStatement(sql)) {
+                    statement.setInt(1, amount);
+                    statement.setString(2, uuid.toString());
+                    statement.executeUpdate();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+        }.runTaskAsynchronously(plugin);
+    }
+
     public boolean unlockPlayerKit(UUID uuid, String kitName, int kitPrice) {
         String checkCoinsSql = "SELECT coins FROM player_stats WHERE uuid = ?";
         String updateCoinsSql = "UPDATE player_stats SET coins = coins - ? WHERE uuid = ?";
@@ -364,6 +419,51 @@ public class DataManager {
             e.printStackTrace();
             return false;
         }
+    }
+
+    public void adminUnlockKit(UUID uuid, String kitName) {
+        String sql = """
+        MERGE INTO player_kits (player_uuid, kit_id)
+        KEY (player_uuid, kit_id)
+        SELECT ?, id FROM kits WHERE name = ?
+        """;
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setString(1, uuid.toString());
+                    stmt.setString(2, kitName);
+                    stmt.executeUpdate();
+                } catch (SQLException e) {
+                    plugin.getLogger().severe("Failed to admin unlock kit: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }.runTaskAsynchronously(plugin);
+    }
+
+    public void adminLockKit(UUID uuid, String kitName) {
+        String sql = """
+        DELETE FROM player_kits
+        WHERE player_uuid = ? AND kit_id = (SELECT id FROM kits WHERE name = ?)
+        """;
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try (Connection conn = dataSource.getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setString(1, uuid.toString());
+                    stmt.setString(2, kitName);
+                    stmt.executeUpdate();
+                } catch (SQLException e) {
+                    plugin.getLogger().severe("Failed to admin lock kit: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }.runTaskAsynchronously(plugin);
     }
 
     public List<String> getTopWins() {
