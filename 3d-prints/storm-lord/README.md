@@ -17,6 +17,7 @@ staff in his left hand.
 
 | File | Use |
 |---|---|
+| **`storm_lord_one_plate.3mf`** | **Start here.** All five colour parts already assembled into one object, centred on one plate, with their colours built in |
 | `stl/storm_lord_single_color.stl` | The whole figure as one watertight solid, for printing in one filament |
 | `stl/multicolor/1_cloud.stl` … `5_gold.stl` | Five colour parts that fit together exactly (no gaps or overlaps), for AMS printing |
 
@@ -29,23 +30,34 @@ staff in his left hand.
 
 ## Printing on the Bambu Lab X2D
 
-### Multicolour (AMS)
+### Multicolour (AMS): one file, one plate
 
-1. In Bambu Studio, select **all five files** in `stl/multicolor/` and drag them
-   in together.
-2. When it asks *"Load these files as a single object with multiple parts?"*,
-   click **Yes**. The parts snap together in the right place.
-3. In the object list, give each part a filament:
+1. Open **`storm_lord_one_plate.3mf`** in Bambu Studio. The figure arrives as
+   one object with five named parts (Cloud, Toga, Skin, Hair and beard, Gold),
+   centred on the plate.
+2. Bambu Studio shows its colour dialog for the five built-in colours. Pick a
+   filament for each one, or let it add new filaments, then click **OK**. Each
+   part is assigned to its filament whole, so nothing is re-painted.
+3. Check the parts against your AMS slots:
 
-   | Part | Suggested filament |
-   |---|---|
-   | `1_cloud` | lavender or light grey |
-   | `2_toga` | royal blue |
-   | `3_skin` | tan or skin tone |
-   | `4_hair` | white |
-   | `5_gold` | gold or silk gold |
+   | Part | Built-in colour | Suggested filament |
+   |---|---|---|
+   | Cloud | lavender | lavender or light grey |
+   | Toga | royal blue | royal blue |
+   | Skin | tan | tan or skin tone |
+   | Hair and beard | white | white |
+   | Gold | gold | gold or silk gold |
 
+   Only have four slots? Map the Cloud and the Hair to the same white
+   filament.
 4. To cut purge waste, turn on **Flush into objects' infill** for the parts.
+
+If you skip the colour dialog, every part starts on filament 1. Select each
+part in the object list and set its filament there.
+
+The same five parts are also in `stl/multicolor/` as separate STLs. To use
+them, drag all five into Bambu Studio together and answer **Yes** to *"Load
+these files as a single object with multiple parts?"*.
 
 ### Single colour
 
@@ -89,6 +101,7 @@ scikit-image trimesh`):
 python3 storm_lord.py 0.3 build          # sculpt -> build/part_*.ply + whole.ply (~2 min)
 python3 export_print.py build stl 0.3    # Blender: decimate + export stl/ (add --blend for a .blend)
 python3 render_preview.py stl previews   # Blender Cycles preview renders (PNG)
+python3 make_3mf.py                      # pack stl/multicolor into storm_lord_one_plate.3mf
 ```
 
 Useful knobs in `storm_lord.py`: `HS` sets the head size, `ARM` holds the arm
