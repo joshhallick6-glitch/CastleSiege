@@ -70,11 +70,12 @@ use grey and paint it.
 The figure is a procedural "digital sculpt". Every body part, fold of the
 toga and puff of cloud is a signed-distance-field shape, and the shapes are
 blended smoothly together (`sdf.py`, `storm_lord.py`). The hair and beard are
-built from about 100 flat, combed locks with fine carved strand grooves. They
-lie close to the head and overlap densely: wavy locks swept back over the
-crown, side hair combed back over the ears, the back falling past the neck
-onto the upper back in tapered ends, and the beard's moustache, cheek and chest rows. The result reads as
-thick, matted-down hair rather than spikes. Marching cubes
+built from about 130 flat, combed locks with fine carved strand grooves. Wavy
+locks sweep back over the crown, and the side hair is combed back over the
+ears. At the back the hair falls onto the upper back in a three-tier cascade of
+overlapping, tapered locks, styled like the beard's moustache, cheek and chest
+rows. It all lies close to the body, so it reads as thick, luscious hair rather
+than spikes. Marching cubes
 then turns the fields into meshes at 0.3 mm resolution, so every mesh is
 guaranteed watertight and manifold. Each colour is carved out of the others in
 priority order (gold → hair → toga → skin → cloud), which is why the parts fit

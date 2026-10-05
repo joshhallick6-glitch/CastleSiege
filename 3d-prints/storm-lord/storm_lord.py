@@ -229,7 +229,7 @@ def hair_lock(ctrl, w0, t0, normal, rng, n=10, grooves=6, gdepth=0.17, wtip=0.75
     pts = catmull_rom(ctrl, n)
     s = np.linspace(0, 1, n)
     if vtip:
-        widths = np.maximum(w0 * np.clip((1 - s) / vtip, 0, 1) ** 0.85, wtip)
+        widths = np.maximum(w0 * np.clip((1 - s) / vtip, 0, 1), wtip)
     else:
         widths = np.maximum(w0 * (1 - s ** taper), wtip)
     thicks = np.maximum(t0 * (1 - 0.65 * s ** 1.5), ttip)
@@ -304,8 +304,8 @@ def build_hair(g):
                 for j, (ps, lf) in enumerate(path)]
         lock(ctrl, 4.0, skull_normal, 11)
 
-    # 5) longer hair falling from the back of the head, lying flat down the
-    #    neck and onto the upper back between the shoulders
+    # 5) a full cascade down the back, styled like the beard: three tiers of
+    #    wavy, overlapping locks lying on the body, the longest underneath
     back = union(torso_parts() + [HX(NAPE)], k=5.0)
 
     def on_back(x, z, lift):
@@ -314,21 +314,32 @@ def build_hair(g):
         inside = np.flatnonzero(d < 0)
         return v3((x, (ys[inside[0]] if len(inside) else 8.0) + lift, z))
 
-    for layer, xs, drop, lift0 in [(0, np.linspace(-12.5, 12.5, 9), 0.0, 0.0),
-                                   (1, np.linspace(-10.9, 10.9, 8), 4.5, 0.9)]:
+    def over_toga(x, z):
+        return 2.2 if z < 63.0 + 0.62 * (x + 30.0) + 1.5 else 0.0
+
+    tiers = [  # x positions (mm), how much shorter than the bottom tier, extra lift, w
+        (np.linspace(-17.5, 17.5, 14), 0.0, 0.0, 3.3),
+        (np.linspace(-15.5, 15.5, 13), 6.5, 1.2, 3.1),
+        (np.linspace(-12.5, 12.5, 11), 13.0, 2.4, 3.0),
+    ]
+    for xs, shorter, lift0, w0 in tiers:
         for x0 in xs:
-            t = abs(x0) / 12.5
+            t = abs(x0) / 17.5
             ph = rng.uniform(0, 2 * np.pi)
-            z_end = 91.0 + 6.5 * t ** 1.3 + drop + rng.uniform(-1.8, 1.8)
-            ctrl = [skull(4.2 * x0, 186, 2.6 + lift0), skull(4.4 * x0, 214, 3.0 + lift0)]
-            ctrl += [w2r(on_back(x0 * f + 0.8 * np.sin(2.1 * j + ph), z, lift + lift0))
-                     for j, (f, z, lift) in enumerate([(0.8, 107.0, 2.7), (1.0, 101.5, 2.6),
-                                                        (1.12, (101.5 + z_end) / 2, 2.4),
-                                                        (1.2, z_end, 2.0)])]
-            locks.append(hair_lock(ctrl, 3.9 * rng.uniform(0.9, 1.1), 1.2,
-                                   lambda p, t, x0=x0: (0.03 * x0, 1.0, 0.3), rng, n=16,
-                                   grooves=int(rng.integers(4, 7)), gdepth=rng.uniform(0.13, 0.2),
-                                   vtip=0.3, wtip=0.28, ttip=0.32))
+            sway = rng.choice([-1, 1]) * rng.uniform(0.8, 1.4)
+            z_end = 78.0 + 10.0 * t ** 1.4 + shorter + rng.uniform(-2.0, 2.0)
+            pts = []
+            for j, z in enumerate(np.linspace(106.5, z_end, 5)):
+                f = (106.5 - z) / (106.5 - z_end)            # 0 at the nape, 1 at the tip
+                x = x0 * (0.72 + 0.45 * f) + sway * np.sin(np.pi * 1.6 * f + 0.3 * ph)
+                lift = (1.5 + lift0 + 0.25 * np.sin(2.3 * j + ph) * (0 < j < 4) - 0.5 * f
+                        + over_toga(x, z))
+                pts.append(w2r(on_back(x, z, lift)))
+            tip = pts[-1] + v3((0.03 * x0 + 0.12 * sway, 0.2, -1.0))
+            ctrl = [skull(np.clip(3.6 * x0, -75, 75), 194, 1.4 + 0.5 * lift0)] + pts + [tip]
+            locks.append(hair_lock(ctrl, w0 * rng.uniform(0.92, 1.08), 1.3,
+                                   lambda p, t, x0=x0: (0.03 * x0, 1.0, 0.25), rng, n=16,
+                                   grooves=4, gdepth=0.24, vtip=0.4, wtip=0.28, ttip=0.32))
 
     for lk in locks:
         W.add(lk, k=0.6 * HS)
