@@ -72,8 +72,8 @@ toga and puff of cloud is a signed-distance-field shape, and the shapes are
 blended smoothly together (`sdf.py`, `storm_lord.py`). The hair and beard are
 built from about 100 flat, combed locks with fine carved strand grooves. They
 lie close to the head and overlap densely: wavy locks swept back over the
-crown, side hair combed back over the ears, the back flowing down onto the
-neck, and the beard's moustache, cheek and chest rows. The result reads as
+crown, side hair combed back over the ears, the back falling past the neck
+onto the upper back in tapered ends, and the beard's moustache, cheek and chest rows. The result reads as
 thick, matted-down hair rather than spikes. Marching cubes
 then turns the fields into meshes at 0.3 mm resolution, so every mesh is
 guaranteed watertight and manifold. Each colour is carved out of the others in

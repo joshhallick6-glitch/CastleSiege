@@ -47,8 +47,7 @@ def look_rows(axis, hint=(0, -1, 0)):
 # --------------------------------------------------------------------------- #
 # Skin: torso, arms, head
 # --------------------------------------------------------------------------- #
-def build_torso(g):
-    T = Field(g)
+def torso_parts():
     parts = [
         ellipsoid((0, 3, 40), (23, 17, 13)),            # hips (inside cloud)
         ellipsoid((0, 0, 54), (24, 17, 15)),            # belly
@@ -65,7 +64,12 @@ def build_torso(g):
             ellipsoid((s * 34, 0.5, 89), (12.8, 12.8, 13.2)),         # delts
             ellipsoid((s * 9, -13, 63), (7.5, 4, 6)),    # abs (under toga)
         ]
-    T.add_all(parts, k=5.0)
+    return parts
+
+
+def build_torso(g):
+    T = Field(g)
+    T.add_all(torso_parts(), k=5.0)
     return T
 
 
@@ -214,15 +218,20 @@ def skull_normal(p, t):
 
 
 def hair_lock(ctrl, w0, t0, normal, rng, n=10, grooves=6, gdepth=0.17, wtip=0.75, ttip=0.42,
-              taper=2.4):
+              taper=2.4, vtip=0.0):
     """Lock of hair through control points (head frame) -> world-space ribbon.
 
     w0 / t0 are the half-width and half-thickness at the root.  A high `taper`
     keeps the lock full most of its length and rounds it off at the end, so the
-    hair reads as dense, combed strands rather than spikes."""
+    hair reads as dense, combed strands rather than spikes.  vtip > 0 instead
+    keeps full width until the last `vtip` of the length, then narrows it in a
+    straight V, for hair ends lying flat on the body."""
     pts = catmull_rom(ctrl, n)
     s = np.linspace(0, 1, n)
-    widths = np.maximum(w0 * (1 - s ** taper), wtip)
+    if vtip:
+        widths = np.maximum(w0 * np.clip((1 - s) / vtip, 0, 1) ** 0.85, wtip)
+    else:
+        widths = np.maximum(w0 * (1 - s ** taper), wtip)
     thicks = np.maximum(t0 * (1 - 0.65 * s ** 1.5), ttip)
     normals = [normal(p, t) if callable(normal) else unit(normal) for p, t in zip(pts, s)]
     world = HEAD_C + HS * (pts - HEAD_REF)
@@ -239,11 +248,14 @@ def around(theta, z, lift):
     return v3((rx * np.sin(t), SKULL_C[1] - ry * np.cos(t), z)) + lift * n
 
 
+NAPE = ellipsoid((0, 9.5, 112.5), (9.0, 6.0, 8.0))      # hair mass over the back of the neck
+
+
 def build_hair(g):
     rng = np.random.default_rng(21)
     W = Field(g)
     hadd(W, [ellipsoid((0, 6.0, 119.5), (11.4, 11.8, 10.2)),     # skull cap under the locks
-             ellipsoid((0, 9.5, 112.5), (9.0, 6.0, 8.0))], k=2.0)  # nape
+             NAPE], k=2.0)
     locks = []
 
     def lock(ctrl, w0, normal, n):
@@ -291,6 +303,33 @@ def build_hair(g):
                       lf + 0.6 * np.sin(1.4 * j + ph) * (j > 0))
                 for j, (ps, lf) in enumerate(path)]
         lock(ctrl, 4.0, skull_normal, 11)
+
+    # 5) longer hair falling from the back of the head, lying flat down the
+    #    neck and onto the upper back between the shoulders
+    back = union(torso_parts() + [HX(NAPE)], k=5.0)
+
+    def on_back(x, z, lift):
+        ys = np.linspace(35, -5, 801)
+        d = back(np.full_like(ys, x), ys, np.full_like(ys, z))
+        inside = np.flatnonzero(d < 0)
+        return v3((x, (ys[inside[0]] if len(inside) else 8.0) + lift, z))
+
+    for layer, xs, drop, lift0 in [(0, np.linspace(-12.5, 12.5, 9), 0.0, 0.0),
+                                   (1, np.linspace(-10.9, 10.9, 8), 4.5, 0.9)]:
+        for x0 in xs:
+            t = abs(x0) / 12.5
+            ph = rng.uniform(0, 2 * np.pi)
+            z_end = 91.0 + 6.5 * t ** 1.3 + drop + rng.uniform(-1.8, 1.8)
+            ctrl = [skull(4.2 * x0, 186, 2.6 + lift0), skull(4.4 * x0, 214, 3.0 + lift0)]
+            ctrl += [w2r(on_back(x0 * f + 0.8 * np.sin(2.1 * j + ph), z, lift + lift0))
+                     for j, (f, z, lift) in enumerate([(0.8, 107.0, 2.7), (1.0, 101.5, 2.6),
+                                                        (1.12, (101.5 + z_end) / 2, 2.4),
+                                                        (1.2, z_end, 2.0)])]
+            locks.append(hair_lock(ctrl, 3.9 * rng.uniform(0.9, 1.1), 1.2,
+                                   lambda p, t, x0=x0: (0.03 * x0, 1.0, 0.3), rng, n=16,
+                                   grooves=int(rng.integers(4, 7)), gdepth=rng.uniform(0.13, 0.2),
+                                   vtip=0.3, wtip=0.28, ttip=0.32))
+
     for lk in locks:
         W.add(lk, k=0.6 * HS)
 

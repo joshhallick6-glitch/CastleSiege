@@ -28,6 +28,7 @@ VIEWS = {  # azimuth (deg, 0 = front), elevation, target, distance
     "face": (-15, 4, (0, -10, 108), 230),
     "low": (25, -4, (4, 0, 88), 520),
     "hand": (35, 10, (46, -12, 76), 200),
+    "back_close": (165, 8, (0, 10, 100), 230),
 }
 
 
@@ -121,7 +122,7 @@ def main():
     scene, cam = setup_scene(build_dir, grey)
     for v in views:
         place(cam, *VIEWS[v])
-        if v in ("face", "hand"):
+        if v in ("face", "hand", "back_close"):
             scene.render.resolution_x, scene.render.resolution_y = 1000, 1000
         else:
             scene.render.resolution_x, scene.render.resolution_y = 900, 1200
