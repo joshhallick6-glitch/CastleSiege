@@ -213,96 +213,95 @@ def skull_normal(p, t):
     return unit((v3(p) - SKULL_C) / SKULL_R ** 2)
 
 
-def hair_lock(ctrl, w0, t0, normal, rng, n=10, grooves=3, gdepth=0.24, wtip=0.42, ttip=0.34,
-              swell=0.2):
-    """Flame-shaped lock through control points (head frame) -> world-space ribbon.
+def hair_lock(ctrl, w0, t0, normal, rng, n=10, grooves=6, gdepth=0.17, wtip=0.75, ttip=0.42,
+              taper=2.4):
+    """Lock of hair through control points (head frame) -> world-space ribbon.
 
-    w0 / t0 are the half-width and half-thickness near the root; the width
-    swells by `swell` just past the root, then tapers to a blunt, printable point."""
+    w0 / t0 are the half-width and half-thickness at the root.  A high `taper`
+    keeps the lock full most of its length and rounds it off at the end, so the
+    hair reads as dense, combed strands rather than spikes."""
     pts = catmull_rom(ctrl, n)
     s = np.linspace(0, 1, n)
-    bulge = 1 - swell + swell * np.sin(np.minimum(s / 0.3, 1) * np.pi / 2)
-    widths = np.maximum(w0 * (1 - s ** 1.6) * bulge, wtip)
-    thicks = np.maximum(t0 * (1 - 0.8 * s ** 1.4), ttip)
+    widths = np.maximum(w0 * (1 - s ** taper), wtip)
+    thicks = np.maximum(t0 * (1 - 0.65 * s ** 1.5), ttip)
     normals = [normal(p, t) if callable(normal) else unit(normal) for p, t in zip(pts, s)]
     world = HEAD_C + HS * (pts - HEAD_REF)
     return ribbon(world, widths * HS, thicks * HS, normals, grooves, gdepth * HS,
                   rng.uniform(0, 2 * np.pi))
 
 
+def around(theta, z, lift):
+    """Point on a horizontal ring round the skull at height z (theta 0 = front, 90 = side)."""
+    q = np.sqrt(max(1 - ((z - SKULL_C[2]) / SKULL_R[2]) ** 2, 0.0))
+    rx, ry = max(SKULL_R[0] * q, 8.0), max(SKULL_R[1] * q, 8.5)
+    t = np.radians(theta)
+    n = unit((np.sin(t) / rx, -np.cos(t) / ry, 0))
+    return v3((rx * np.sin(t), SKULL_C[1] - ry * np.cos(t), z)) + lift * n
+
+
 def build_hair(g):
     rng = np.random.default_rng(21)
     W = Field(g)
-    hadd(W, [ellipsoid((0, 6.5, 120.0), (11.0, 11.3, 9.8)),      # skull cap under the locks
-             ellipsoid((0, 9.5, 113.0), (8.5, 5.5, 7.5))], k=2.0)  # nape
+    hadd(W, [ellipsoid((0, 6.0, 119.5), (11.4, 11.8, 10.2)),     # skull cap under the locks
+             ellipsoid((0, 9.5, 112.5), (9.0, 6.0, 8.0))], k=2.0)  # nape
     locks = []
 
-    # 1) locks lying over the crown, from the circlet back to the nape
-    for al in np.linspace(-46, 46, 9):
-        path = [(47, 0.3), (75, 1.0), (108, 1.2), (142, 1.5), (172, 2.0), (197, 2.9)]
-        ctrl = [skull(al * (1 + 0.3 * j / 5), ps, lf) for j, (ps, lf) in enumerate(path)]
-        ctrl.append(skull(al * 1.45, 210, 6.5) + v3((0, 2.5, 0)))     # tip flicks back
-        locks.append(hair_lock(ctrl, 4.0, 1.3, skull_normal, rng, n=12, grooves=4))
+    def lock(ctrl, w0, normal, n):
+        locks.append(hair_lock(ctrl, w0 * rng.uniform(0.92, 1.08), 1.2, normal, rng, n=n,
+                               grooves=int(rng.integers(4, 7)), gdepth=rng.uniform(0.13, 0.2)))
 
-    # 2) a looser top layer for volume, swept up off the brow then back
-    for al in np.linspace(-30, 30, 6):
-        path = [(52, 1.0), (72, 3.6), (100, 4.6), (134, 4.2), (166, 4.0), (190, 4.8)]
-        ctrl = [skull(al * (1 + 0.3 * j / 5), ps, lf) for j, (ps, lf) in enumerate(path)]
-        ctrl.append(skull(al * 1.5, 203, 9.0) + v3((0, 3.0, 1.5)))
-        locks.append(hair_lock(ctrl, 3.7, 1.3, skull_normal, rng, n=12, grooves=4))
-    # 2b) a crest of shorter locks flicking up from the hairline
-    for al in (-27, -9, 9, 27):
-        path = [(50, 0.8), (66, 3.2), (86, 5.6), (108, 6.4)]
-        ctrl = [skull(al * (1 + 0.15 * j), ps, lf) for j, (ps, lf) in enumerate(path)]
-        ctrl.append(ctrl[-1] + v3((np.sign(al) * 1.0, 3.5, 1.8)))
-        locks.append(hair_lock(ctrl, 3.3, 1.2, skull_normal, rng, n=9, grooves=3))
-
-    # 3) locks flowing down the back of the head
-    for al in (-68, -50, -31, -11, 11, 31, 50, 68):
-        path = [(118, 1.5), (150, 1.9), (180, 2.4), (206, 3.2), (226, 4.6)]
-        ctrl = [skull(np.clip(al * (1 + 0.1 * j), -80, 80), ps, lf)       # never wrap to the face
+    # 1) crown: wavy clumps swept back over the top, down onto the nape
+    for al in np.linspace(-58, 58, 11):
+        ph = rng.uniform(0, 2 * np.pi)
+        path = [(47, 0.3), (76, 1.4), (106, 2.0), (138, 2.3), (168, 2.6), (196, 2.8), (220, 2.4)]
+        ctrl = [skull(np.clip(al * (1 + 0.2 * j / 6) + 5.0 * np.sin(0.95 * j + ph), -80, 80), ps,
+                      lf + 0.8 * np.sin(1.4 * j + ph) * (j > 0))
                 for j, (ps, lf) in enumerate(path)]
-        ctrl.append(ctrl[-1] + v3((np.sign(al) * 2.5, 3.0, -0.5)))
-        locks.append(hair_lock(ctrl, 3.8, 1.3, skull_normal, rng, n=10, grooves=4))
+        ctrl.append(skull(np.clip(al * 1.2, -80, 80), 234, 1.6))
+        lock(ctrl, 4.1, skull_normal, 13)
 
-    # 4) the big wind-swept wings either side of the face
-    wings = [  # root (x, y, z) for the +X side, rise (deg), sweep back, length, half-width
-        ((9.0, 3.0, 125.5), 42, 0.60, 17, 3.3),
-        ((9.8, 1.5, 122.0), 27, 0.55, 22, 3.8),
-        ((10.2, 0.5, 118.5), 13, 0.50, 26, 4.1),
-        ((10.4, 0.0, 115.0), 1, 0.45, 27, 4.1),
-        ((10.4, -0.5, 111.5), -10, 0.40, 25, 3.9),
-        ((10.0, -1.0, 108.0), -21, 0.35, 21, 3.5),
-        ((9.6, -1.5, 104.5), -33, 0.30, 17, 3.1),
-        ((8.8, 6.5, 124.0), 30, 0.95, 18, 3.5),   # second, swept-back layer
-        ((9.5, 7.0, 118.5), 12, 0.90, 21, 3.7),
-        ((9.5, 7.0, 112.5), -6, 0.85, 20, 3.5),
-    ]
-    up = v3((0, 0, 1))
+    # 2) a fuller top layer: lifts off the circlet, then combs back
+    for al in np.linspace(-36, 36, 7):
+        ph = rng.uniform(0, 2 * np.pi)
+        path = [(53, 1.0), (80, 2.9), (112, 3.4), (146, 3.3), (178, 3.4), (204, 3.2)]
+        ctrl = [skull(al * (1 + 0.2 * j / 5) + 4.0 * np.sin(0.95 * j + ph), ps,
+                      lf + 0.6 * np.sin(1.4 * j + ph))
+                for j, (ps, lf) in enumerate(path)]
+        ctrl.append(skull(al * 1.25, 222, 2.6))
+        lock(ctrl, 3.8, skull_normal, 12)
+
+    # 3) sides: from the temples back and down over the ears to the nape,
+    #    with a little volume and lobed, wavy edges
     for side in (-1, 1):
-        for (bx, by, bz), rise, back, L, w in wings:
-            a = np.radians(rise + rng.uniform(-3, 3))
-            d = unit((side * np.cos(a), back, np.sin(a)))
-            b = v3((side * bx, by, bz))
-            L *= rng.uniform(0.88, 1.1)
-            w *= rng.uniform(0.9, 1.08)
-            ctrl = [b, b + d * L * 0.3 + up * 0.8, b + d * L * 0.62 - up * 0.6,
-                    b + d * L * 0.86 + up * 0.5 + v3((0, 1.2, 0)),
-                    b + d * L + up * 2.4 + v3((0, 2.6, 0))]
-            locks.append(hair_lock(ctrl, w, 1.3, lambda p, t: (0, -1.0, 0.2 + 0.9 * t), rng,
-                                   n=11, grooves=4, swell=0.05))
+        for i, zs in enumerate(np.arange(107.0, 127.5, 2.3)):
+            ph = rng.uniform(0, 2 * np.pi)
+            v = 0.7 + 0.9 * np.sin(np.pi * (zs - 107) / 20) + rng.uniform(-0.5, 0.6)
+            drop = min(12.0, zs - 106.5)
+            path = [(62, 0.0, -0.3), (92, 0.25, 1.1 + v), (124, 0.55, 1.7 + v),
+                    (154, 0.85, 1.5 + 0.6 * v), (172, 1.0, 0.8)]
+            ctrl = [around(side * th, zs - drop * f + 0.7 * np.sin(2.2 * j + ph) * (0 < j < 4), lf)
+                    for j, (th, f, lf) in enumerate(path)]
+            lock(ctrl, 3.9, lambda p, t: skull_normal(p, t), 12)
 
+    # 4) back of the head: one mass flowing down onto the neck
+    for al in np.linspace(-70, 70, 11):
+        ph = rng.uniform(0, 2 * np.pi)
+        path = [(112, 1.2), (145, 2.2), (178, 2.9), (205, 3.3), (226, 3.1), (240, 2.4)]
+        ctrl = [skull(np.clip(al * (1 + 0.05 * j) + 4.0 * np.sin(0.95 * j + ph), -80, 80), ps,
+                      lf + 0.6 * np.sin(1.4 * j + ph) * (j > 0))
+                for j, (ps, lf) in enumerate(path)]
+        lock(ctrl, 4.0, skull_normal, 11)
     for lk in locks:
-        W.add(lk, k=0.7 * HS)
+        W.add(lk, k=0.6 * HS)
 
     # bushy, scowling eyebrows
     for side in (-1, 1):
         for t, rise, L, w in ((0.0, 0.2, 3.4, 1.35), (0.42, 0.4, 3.8, 1.4), (0.8, 0.5, 2.8, 1.25)):
             b = lerp((side * 1.8, -14.3, 118.0), (side * 7.4, -11.6, 119.4), t)
             d = unit((side, 0.3, rise))
-            ctrl = [b - d * 0.8, b + d * L * 0.5 + v3((0, 0, 0.3)), b + d * L + v3((0, 0.6, 0.7))]
-            W.add(hair_lock(ctrl, w, 0.8, (0, -1, 0.35), rng, n=6, grooves=2, gdepth=0.12,
-                            wtip=0.36, ttip=0.3), k=0.5 * HS)
+            ctrl = [b - d * 0.8, b + d * L * 0.5 + v3((0, 0, 0.3)), b + d * L + v3((0, 0.4, 0.4))]
+            W.add(hair_lock(ctrl, w, 0.8, (0, -1, 0.35), rng, n=6, grooves=3, gdepth=0.1,
+                            wtip=0.45, ttip=0.32, taper=1.8), k=0.5 * HS)
     return W
 
 
@@ -324,47 +323,48 @@ def build_beard(g):
         locks.append(hair_lock([(s * 0.4, -15.9, 106.9), (s * 4.3, -17.3, 105.9),
                                 (s * 8.0, -17.0, 102.0), (s * 10.2, -15.9, 96.5),
                                 (s * 11.0, -15.0, 92.5)],
-                               2.4, 1.15, (s * 0.2, -1, 0.35), rng, n=10, gdepth=0.15))
+                               2.4, 1.15, (s * 0.2, -1, 0.35), rng, n=10, grooves=4,
+                               gdepth=0.12, wtip=0.6, taper=2.0))
         locks.append(hair_lock([(s * 1.2, -15.7, 106.2), (s * 4.0, -17.9, 103.6),
                                 (s * 6.2, -18.5, 98.5), (s * 7.0, -18.7, 93.0)],
-                               2.0, 1.05, (s * 0.15, -1, 0.2), rng, n=8, gdepth=0.15))
+                               2.0, 1.05, (s * 0.15, -1, 0.2), rng, n=8, grooves=4,
+                               gdepth=0.12, wtip=0.6, taper=2.0))
         # cheek and jaw locks over the sideburns
-        for (bx, by, bz), (ex, ey, ez) in [((9.3, -4.0, 110.0), (11.8, -7.5, 101.0)),
-                                           ((10.0, -7.5, 106.0), (12.8, -11.0, 97.0)),
-                                           ((9.0, -11.0, 103.0), (10.8, -14.5, 95.0))]:
+        for (bx, by, bz), (ex, ey, ez) in [((9.3, -4.0, 110.0), (11.4, -7.5, 101.0)),
+                                           ((9.6, -6.0, 108.0), (12.0, -9.5, 99.0)),
+                                           ((10.0, -7.5, 106.0), (12.2, -11.0, 97.0)),
+                                           ((9.0, -11.0, 103.0), (10.6, -14.5, 95.0))]:
             b, e = v3((s * bx, by, bz)), v3((s * ex, ey, ez))
             root = b + v3((-s * 1.6, 2.2, 2.0))          # buried in the head, no stub
-            locks.append(hair_lock([root, b, lerp(b, e, 0.5) + v3((s * 0.6, -0.4, 0)), e],
-                                   2.9, 1.15, (s * 0.6, -0.8, 0.1), rng, n=8, swell=0.0))
-        # side flares sweeping out to meet the mane
-        for z, L, dz in [(105, 19, -0.25), (101, 21, -0.6), (96.5, 21, -1.0), (91.5, 19, -1.5),
-                         (87, 15, -2.1)]:
+            locks.append(hair_lock([root, b, lerp(b, e, 0.5) + v3((s * 0.4, -0.4, 0)), e],
+                                   2.9, 1.15, (s * 0.6, -0.8, 0.1), rng, n=8, grooves=5))
+        # sides of the beard: short and combed down, hugging the jowls
+        for z, L, dz in [(104, 10, -1.2), (100, 12, -1.6), (95.5, 13, -2.2), (91, 12, -3.0)]:
             b = v3((s * 11.5, -9.5, z))
-            d = unit((s, -0.25, dz))
-            locks.append(hair_lock([b, b + d * L * 0.35 + v3((0, 0, 0.8)),
-                                    b + d * L * 0.7 - v3((0, 0, 0.6)),
-                                    b + d * L + v3((s * 1.2, 0, 1.6))],
-                                   3.4, 1.25, (s * 0.25, -1, 0.1), rng, n=9))
+            d = unit((s * 0.8, -0.35, dz))
+            locks.append(hair_lock([b, b + d * L * 0.5 + v3((s * 0.3, 0, 0)),
+                                    b + d * L + v3((s * 0.4, 0, 0.5))],
+                                   3.3, 1.2, (s * 0.35, -1, 0.1), rng, n=8, grooves=5))
 
-    # the beard proper: three overlapping rows hanging down the chest
+    # the beard proper: three dense, overlapping rows hanging down the chest
     rows = [  # root y, root z, x positions, tip y (world), tip z centre/edge (world), w, t
-        (-13.8, 100.5, [-12.5, -8.4, -4.2, 0.0, 4.2, 8.4, 12.5], -20.0, 61, 76, 3.8, 1.35),
-        (-16.6, 98.0, [-10.5, -6.3, -2.1, 2.1, 6.3, 10.5], -22.0, 66, 79, 3.5, 1.3),
-        (-18.6, 100.0, [-8.0, -4.0, 0.0, 4.0, 8.0], -24.0, 77, 85, 3.1, 1.2),
+        (-13.8, 100.5, np.linspace(-13, 13, 9), -20.0, 62, 76, 3.4, 1.3),
+        (-16.6, 98.0, np.linspace(-11, 11, 8), -22.0, 66, 79, 3.2, 1.25),
+        (-18.6, 100.0, np.linspace(-8.5, 8.5, 6), -24.0, 76, 84, 3.0, 1.2),
     ]
     for y0, z0, xs, yend, zc, ze, w0, t0 in rows:
         for x in xs:
-            t = abs(x) / 12.5
-            b = v3((x, y0, z0 - 0.04 * x * x + rng.uniform(-0.6, 0.6)))
-            e = w2r((x * HS * 1.5 + rng.uniform(-1, 1), yend,
-                     zc + (ze - zc) * t ** 1.5 + rng.uniform(-1.5, 1.5)))
-            sway = rng.choice([-1, 1]) * rng.uniform(0.8, 1.6)
+            t = abs(x) / 13.0
+            b = v3((x, y0, z0 - 0.04 * x * x + rng.uniform(-0.5, 0.5)))
+            e = w2r((x * HS * 1.35 + rng.uniform(-0.8, 0.8), yend,
+                     zc + (ze - zc) * t ** 1.5 + rng.uniform(-1.2, 1.2)))
+            sway = rng.choice([-1, 1]) * rng.uniform(0.6, 1.2)
             ctrl = [b, lerp(b, e, 0.3) + v3((sway, 0, 0)), lerp(b, e, 0.65) - v3((sway, 0, 0)),
-                    e, e + v3((x * 0.12 + sway * 0.4, -0.4, -1.5))]
+                    e, e + v3((x * 0.06 + sway * 0.3, -0.3, -1.2))]
             locks.append(hair_lock(ctrl, w0 * (1 - 0.15 * t), t0, (0.05 * x, -1, 0.12), rng,
-                                   n=11))
+                                   n=11, grooves=5, taper=2.0, wtip=0.7))
     for lk in locks:
-        W.add(lk, k=0.7 * HS)
+        W.add(lk, k=0.6 * HS)
     return W
 
 
@@ -546,10 +546,9 @@ def cleanup(F):
         for n in names:
             F[n][specks] = np.maximum(F[n][specks], 1e-3)
     del lab
-    lab, num = ndimage.label(whole >= 0, structure=np.ones((3, 3, 3)))  # only truly sealed
+    lab, num = ndimage.label(whole >= 0)
+    voids = (lab > 0) & (lab != lab[0, 0, 0])
     if num > 1:
-        outside = lab[0, 0, 0]
-        voids = (lab > 0) & (lab != outside)
         print(f"  filling {num - 1} void(s), {int(voids.sum())} voxels")
         stack = np.stack([F[n][voids] for n in names])
         nearest = np.argmin(stack, axis=0)

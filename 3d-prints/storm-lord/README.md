@@ -56,8 +56,7 @@ use grey and paint it.
 
 * **Layer height:** 0.12 mm for the best face and hair, or 0.16 mm for speed
 * **Supports:** on, **Tree (auto)**, threshold angle about 30°. Supports are
-  needed under the beard tips, the side flares of the mane, the arms, and the
-  lightning bolt.
+  needed under the beard tips, the arms, and the lightning bolt.
 * **Support interface:** the X2D's second nozzle can print the support
   interface in a breakaway support filament for a cleaner underside. This is
   optional.
@@ -70,11 +69,12 @@ use grey and paint it.
 
 The figure is a procedural "digital sculpt". Every body part, fold of the
 toga and puff of cloud is a signed-distance-field shape, and the shapes are
-blended smoothly together (`sdf.py`, `storm_lord.py`). The mane and beard are
-built from about 120 flat, flame-shaped locks with carved strand grooves. They
-are layered in overlapping tiers (crown, swept-back volume, side wings, back,
-and the beard's moustache, cheek and chest rows), so the hair reads as a
-sculpted mass instead of separate spikes. Marching cubes
+blended smoothly together (`sdf.py`, `storm_lord.py`). The hair and beard are
+built from about 100 flat, combed locks with fine carved strand grooves. They
+lie close to the head and overlap densely: wavy locks swept back over the
+crown, side hair combed back over the ears, the back flowing down onto the
+neck, and the beard's moustache, cheek and chest rows. The result reads as
+thick, matted-down hair rather than spikes. Marching cubes
 then turns the fields into meshes at 0.3 mm resolution, so every mesh is
 guaranteed watertight and manifold. Each colour is carved out of the others in
 priority order (gold → hair → toga → skin → cloud), which is why the parts fit
