@@ -86,7 +86,7 @@ def ellipsoid(c, radii, M=None):
         px, py, pz = local(X, Y, Z, c, M)
         k0 = np.sqrt((px / r[0]) ** 2 + (py / r[1]) ** 2 + (pz / r[2]) ** 2)
         k1 = np.sqrt((px / r[0] ** 2) ** 2 + (py / r[1] ** 2) ** 2 + (pz / r[2] ** 2) ** 2)
-        return k0 * (k0 - 1.0) / np.maximum(k1, 1e-6)
+        return np.where(k1 > 1e-6, k0 * (k0 - 1.0) / np.maximum(k1, 1e-6), -r.min())
 
     if np.allclose(M, np.eye(3)):
         return Prim(fn, c - r, c + r)
@@ -311,6 +311,82 @@ def extrude(verts, c, u, v, thick, rnd=0.3, bevel=0.0):
 
 
 # --------------------------------------------------------------------------- #
+# Sculpted hair: flat, tapering ribbons with carved strand grooves
+# --------------------------------------------------------------------------- #
+class Compound(Prim):
+    """Hard union of parts; Field evaluates each part only inside its own box."""
+
+    def __init__(self, parts):
+        self.parts = parts
+        super().__init__(lambda X, Y, Z: union(parts)(X, Y, Z),
+                         np.min([p.bmin for p in parts], axis=0),
+                         np.max([p.bmax for p in parts], axis=0))
+
+
+def ribbon_segment(A, B, wA, wB, tA, tB, nA, nB, grooves=0, gA=0.0, gB=0.0, phase=0.0):
+    """Flat elliptical 'sausage' from A to B: half-width w across, half-thickness t
+    along the normal n, with optional strand grooves running along its length."""
+    A, B = v3(A), v3(B)
+    D = B - A
+    L2 = float(D @ D)
+    T = D / np.sqrt(L2)
+    nA, nB = v3(nA), v3(nB)
+    nA = unit(nA - (nA @ T) * T)
+    nB = unit(nB - (nB @ T) * T)
+    bA, bB = np.cross(T, nA), np.cross(T, nB)
+
+    def fn(X, Y, Z):
+        px, py, pz = X - A[0], Y - A[1], Z - A[2]
+        h = np.clip((px * D[0] + py * D[1] + pz * D[2]) / L2, 0.0, 1.0)
+        qx, qy, qz = px - h * D[0], py - h * D[1], pz - h * D[2]
+        w = wA + (wB - wA) * h
+        t = tA + (tB - tA) * h
+        n = [nA[i] + (nB[i] - nA[i]) * h for i in range(3)]
+        b = [bA[i] + (bB[i] - bA[i]) * h for i in range(3)]
+        u = qx * b[0] + qy * b[1] + qz * b[2]
+        v = qx * n[0] + qy * n[1] + qz * n[2]
+        a = qx * T[0] + qy * T[1] + qz * T[2]
+        k0 = np.sqrt((u / w) ** 2 + (v / t) ** 2 + (a / t) ** 2)
+        k1 = np.sqrt((u / (w * w)) ** 2 + (v / (t * t)) ** 2 + (a / (t * t)) ** 2)
+        d = np.where(k1 > 1e-6, k0 * (k0 - 1.0) / np.maximum(k1, 1e-6), -np.minimum(w, t))
+        if grooves:
+            g = gA + (gB - gA) * h
+            s = np.clip(u / w, -1.0, 1.0)
+            d = d + g * 0.5 * (1.0 + np.cos(np.pi * grooves * (s + 1.0) + phase))
+        return d
+
+    r = max(wA, wB, tA, tB) + max(gA, gB)
+    return Prim(fn, np.minimum(A, B) - r, np.maximum(A, B) + r)
+
+
+def catmull_rom(ctrl, n):
+    """n points on a uniform Catmull-Rom spline through the control points."""
+    P = np.asarray(ctrl, dtype=np.float64)
+    P = np.vstack([2 * P[0] - P[1], P, 2 * P[-1] - P[-2]])
+    segs = len(P) - 3
+    out = []
+    for t in np.linspace(0, segs, n):
+        i = min(int(t), segs - 1)
+        u = t - i
+        p0, p1, p2, p3 = P[i], P[i + 1], P[i + 2], P[i + 3]
+        out.append(0.5 * ((2 * p1) + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u
+                          + (-p0 + 3 * p1 - 3 * p2 + p3) * u ** 3))
+    return np.array(out)
+
+
+def ribbon(pts, widths, thicks, normals, grooves=3, gdepth=0.0, phase=0.0):
+    """Lock made of ribbon segments through pts (all arrays have len(pts) rows)."""
+    parts = []
+    for i in range(len(pts) - 1):
+        g0 = gdepth * min(1.0, thicks[i] / max(thicks[0], 1e-6))
+        g1 = gdepth * min(1.0, thicks[i + 1] / max(thicks[0], 1e-6))
+        parts.append(ribbon_segment(pts[i], pts[i + 1], widths[i], widths[i + 1],
+                                    thicks[i], thicks[i + 1], normals[i], normals[i + 1],
+                                    grooves, g0, g1, phase))
+    return Compound(parts)
+
+
+# --------------------------------------------------------------------------- #
 # Voxel grid + fields
 # --------------------------------------------------------------------------- #
 class Grid:
@@ -346,7 +422,18 @@ class Field:
         if reg is None:
             return
         slc, X, Y, Z = reg
-        d = prim(X, Y, Z).astype(np.float32)
+        if isinstance(prim, Compound):
+            d = np.full(tuple(sl.stop - sl.start for sl in slc), BIG, dtype=np.float32)
+            for part in prim.parts:
+                sub = self.g.region(part.bmin - m, part.bmax + m)
+                if sub is None:
+                    continue
+                pslc, PX, PY, PZ = sub
+                loc = tuple(slice(ps.start - s0.start, ps.stop - s0.start)
+                            for ps, s0 in zip(pslc, slc))
+                d[loc] = np.minimum(d[loc], part(PX, PY, PZ))
+        else:
+            d = prim(X, Y, Z).astype(np.float32)
         cur = self.a[slc]
         if op == "add":
             self.a[slc] = smin(cur, d, k)

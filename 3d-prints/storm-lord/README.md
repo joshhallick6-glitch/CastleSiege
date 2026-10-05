@@ -68,9 +68,13 @@ use grey and paint it.
 
 ## How it was made
 
-The figure is a procedural "digital sculpt". Every body part, lock of hair,
-fold of the toga and puff of cloud is a signed-distance-field shape, and the
-shapes are blended smoothly together (`sdf.py`, `storm_lord.py`). Marching cubes
+The figure is a procedural "digital sculpt". Every body part, fold of the
+toga and puff of cloud is a signed-distance-field shape, and the shapes are
+blended smoothly together (`sdf.py`, `storm_lord.py`). The mane and beard are
+built from about 120 flat, flame-shaped locks with carved strand grooves. They
+are layered in overlapping tiers (crown, swept-back volume, side wings, back,
+and the beard's moustache, cheek and chest rows), so the hair reads as a
+sculpted mass instead of separate spikes. Marching cubes
 then turns the fields into meshes at 0.3 mm resolution, so every mesh is
 guaranteed watertight and manifold. Each colour is carved out of the others in
 priority order (gold → hair → toga → skin → cloud), which is why the parts fit
